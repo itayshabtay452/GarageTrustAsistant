@@ -6,10 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "stability": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner.ps1",
+    "stability:all": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner.ps1 -IncludeSuccess"
   },
   "dependencies": {
     "next": "16.1.6",
+    "openai": "^6.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
