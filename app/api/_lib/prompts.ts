@@ -22,6 +22,83 @@ const SYSTEM_PROMPT_HE = `אתה כלי עזר דיגיטלי לנציג/ת שי
 
 export { SYSTEM_PROMPT_HE };
 
+export const SYSTEM_PROMPT_HE_V2 = `אתה כלי עזר דיגיטלי לנציג/ת שירות במוקד טלפוני של "מרכז שירות רן דיין".
+החזר JSON בלבד, ללא Markdown וללא טקסט חופשי מחוץ ל-JSON.
+שפת הפלט: עברית בלבד.
+הפלט חייב להתאים בדיוק למבנה v2: root עם ok ו-data.
+בתוך data חייבים להופיע כל השדות הנדרשים לפי הסכמה שניתנה בזמן הריצה.
+reply_options חייב להכיל בדיוק 3 אפשרויות.
+confidence חייב להיות מספר בין 0 ל-100 כולל.
+next_question: אם should_ask_followup=true אז חייבת להיות שאלה חדה אחת בדיוק, בשורה אחת, ללא ירידת שורה. אם should_ask_followup=false אז next_question חייב להיות "".
+כלל summary:
+- אם should_end_call=false אז summary חייב להיות ריק: recommended_call_response="", key_points=[], do_not_say=[].
+- אם should_end_call=true אז summary חייב להיות לא ריק (לפחות אחד משדות summary אינו ריק).`;
+
+type BuildMessagesV2Input = {
+  schema_version: "2.0";
+  conversation_id?: string;
+  context?: { garage_name?: string; policy_notes?: string };
+  transcript: Array<{
+    turn_id?: string;
+    customer_said: string;
+    agent_said?: string;
+    customer_replied?: string;
+  }>;
+  latest_customer_message: string;
+  agent_last_actual_reply?: string;
+  output_language?: "he";
+};
+
+export function buildMessagesV2(
+  input: BuildMessagesV2Input,
+): ChatCompletionMessageParam[] {
+  const lines: string[] = [];
+
+  lines.push(`schema_version: ${input.schema_version}`);
+
+  if (input.conversation_id) {
+    lines.push(`conversation_id: ${input.conversation_id}`);
+  }
+
+  if (input.context?.garage_name) {
+    lines.push(`garage_name: ${input.context.garage_name}`);
+  }
+
+  if (input.context?.policy_notes) {
+    lines.push(`policy_notes: ${input.context.policy_notes}`);
+  }
+
+  if (input.output_language) {
+    lines.push(`output_language: ${input.output_language}`);
+  }
+
+  if (input.agent_last_actual_reply) {
+    lines.push(`agent_last_actual_reply: ${input.agent_last_actual_reply}`);
+  }
+
+  lines.push("transcript:");
+  input.transcript.forEach((turn, index) => {
+    const turnLines = [`${index + 1}) C: ${turn.customer_said}`];
+
+    if (turn.agent_said) {
+      turnLines.push(`A: ${turn.agent_said}`);
+    }
+
+    if (turn.customer_replied) {
+      turnLines.push(`CR: ${turn.customer_replied}`);
+    }
+
+    lines.push(turnLines.join(" | "));
+  });
+
+  lines.push(`latest_customer_message: ${input.latest_customer_message}`);
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT_HE_V2 },
+    { role: "user", content: lines.join("\n") },
+  ];
+}
+
 export function buildMessages(
   input: string | Array<{ role: "user" | "assistant"; content: string }>,
 ): ChatCompletionMessageParam[] {
