@@ -7,13 +7,22 @@ function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json({ ok: false, error: { code, message } }, { status });
 }
 
+function getClientIp(request: Request): string | null {
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    return xff.split(",")[0].trim();
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
     let ip = "local";
-    const xff = request.headers.get("x-forwarded-for");
-    if (xff) {
-      ip = xff.split(",")[0].trim();
+    const clientIp = getClientIp(request);
+    if (clientIp) {
+      ip = clientIp;
     }
 
     // בדיקת rate limit
