@@ -49,6 +49,9 @@ export default function Home() {
   );
   const [isCallEnded, setIsCallEnded] = useState(false);
   const [valueFeedback, setValueFeedback] = useState<"yes" | "no" | null>(null);
+  const [updateCustomerSaid, setUpdateCustomerSaid] = useState("");
+  const [updateIAnswered, setUpdateIAnswered] = useState("");
+  const [updateCustomerReacted, setUpdateCustomerReacted] = useState("");
   const [isAwaitingAgentChoice, setIsAwaitingAgentChoice] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,28 +99,27 @@ export default function Home() {
     setIsAwaitingAgentChoice(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const submitMessage = async (text: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
     try {
-      const trimmedInput = inputText.trim();
+      const trimmedInput = text.trim();
       if (!trimmedInput) {
         setError("השדה חובה למילוי.");
         setLoading(false);
-        return;
+        return false;
       }
       if (trimmedInput.length < 3) {
         setError("הטקסט חייב להכיל לפחות 3 תווים.");
         setLoading(false);
-        return;
+        return false;
       }
 
       if (isAwaitingAgentChoice) {
         setError("יש לבחור אחת מאפשרויות התגובה לפני שממשיכים.");
         setLoading(false);
-        return;
+        return false;
       }
 
       setResponse(null);
@@ -214,13 +216,30 @@ export default function Home() {
       }
       setSelectedReplyOption(null);
       setInputText("");
+      return true;
     } catch (err) {
       // ודא שתמיד נשמר string | null בלבד
       const errorMessage =
         err instanceof Error ? err.message : "אירעה שגיאה. נסה שוב.";
       setError(errorMessage);
+      return false;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    await submitMessage(inputText);
+  };
+
+  const handleSendUpdate = async () => {
+    const mergedText = `CALL UPDATE\nCustomer said: ${updateCustomerSaid}\nI answered: ${updateIAnswered}\nCustomer reacted: ${updateCustomerReacted}`;
+    const didSubmit = await submitMessage(mergedText);
+    if (didSubmit) {
+      setUpdateCustomerSaid("");
+      setUpdateIAnswered("");
+      setUpdateCustomerReacted("");
     }
   };
 
@@ -321,6 +340,65 @@ export default function Home() {
               איפוס שיחה
             </button>
           </form>
+
+          <section
+            className="mt-8 p-6 bg-white rounded-lg border border-gray-200"
+            dir="rtl"
+          >
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              3-Field Update
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer said
+                </label>
+                <textarea
+                  value={updateCustomerSaid}
+                  onChange={(e) => setUpdateCustomerSaid(e.target.value)}
+                  rows={3}
+                  disabled={loading || isCallEnded}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  I answered
+                </label>
+                <textarea
+                  value={updateIAnswered}
+                  onChange={(e) => setUpdateIAnswered(e.target.value)}
+                  rows={3}
+                  disabled={loading || isCallEnded}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer reacted
+                </label>
+                <textarea
+                  value={updateCustomerReacted}
+                  onChange={(e) => setUpdateCustomerReacted(e.target.value)}
+                  rows={3}
+                  disabled={loading || isCallEnded}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSendUpdate}
+                disabled={loading || isCallEnded}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Send Update
+              </button>
+            </div>
+          </section>
 
           {error && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
