@@ -163,6 +163,20 @@ function extractResponseTextOrReturn(completion: any): string | NextResponse {
   return responseText;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseModelJsonOrReturn(responseText: string): any | NextResponse {
+  try {
+    return JSON.parse(responseText);
+  } catch (parseError) {
+    console.error("[LOG] JSON parse error:", parseError);
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -261,29 +275,9 @@ export async function POST(request: NextRequest) {
       return responseTextOrResponse;
     const responseText = responseTextOrResponse;
 
-    // Parse structured JSON response
-    let parsedData: {
-      urgency_level: string;
-      reply_options: string[];
-      should_ask_followup: boolean;
-      next_question: string;
-      should_end_call: boolean;
-      summary: {
-        recommended_call_response: string;
-        key_points: string[];
-        do_not_say: string[];
-      };
-    };
-    try {
-      parsedData = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error("[LOG] JSON parse error:", parseError);
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
+    const parsedOrResponse = parseModelJsonOrReturn(responseText);
+    if (parsedOrResponse instanceof NextResponse) return parsedOrResponse;
+    const parsedData = parsedOrResponse;
 
     // Validate required fields
     if (
@@ -309,7 +303,8 @@ export async function POST(request: NextRequest) {
     }
 
     const hasInvalidReplyOption = parsedData.reply_options.some(
-      (option) => typeof option !== "string" || option.trim().length === 0,
+      (option: unknown) =>
+        typeof option !== "string" || option.trim().length === 0,
     );
     if (hasInvalidReplyOption) {
       console.error("[LOG] Invalid reply_options in response");
@@ -347,10 +342,11 @@ export async function POST(request: NextRequest) {
     }
     const invalidSummaryItems =
       parsedData.summary.key_points.some(
-        (point) => typeof point !== "string" || point.trim().length === 0,
+        (point: unknown) =>
+          typeof point !== "string" || point.trim().length === 0,
       ) ||
       parsedData.summary.do_not_say.some(
-        (item) => typeof item !== "string" || item.trim().length === 0,
+        (item: unknown) => typeof item !== "string" || item.trim().length === 0,
       );
     if (invalidSummaryItems) {
       console.error("[LOG] Invalid summary array items");
@@ -400,7 +396,7 @@ export async function POST(request: NextRequest) {
     // Check Hebrew in response fields
     const hebrewRegex = /[\u0590-\u05FF]/;
     const noHebrewInOptions = parsedData.reply_options.some(
-      (option) => !hebrewRegex.test(option),
+      (option: unknown) => !hebrewRegex.test(option as string),
     );
     if (noHebrewInOptions) {
       console.error("[LOG] No Hebrew detected in reply_options");
