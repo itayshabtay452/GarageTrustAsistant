@@ -177,6 +177,165 @@ function parseModelJsonOrReturn(responseText: string): any | NextResponse {
   }
 }
 
+function validateParsedDataOrReturn(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parsedData: any,
+  normalizedNextQuestion: string,
+): NextResponse | null {
+  // Validate required fields
+  if (
+    !parsedData.urgency_level ||
+    !parsedData.reply_options ||
+    !Array.isArray(parsedData.reply_options) ||
+    parsedData.reply_options.length !== 3 ||
+    typeof parsedData.should_ask_followup !== "boolean" ||
+    typeof parsedData.next_question !== "string" ||
+    typeof parsedData.should_end_call !== "boolean" ||
+    !parsedData.summary ||
+    typeof parsedData.summary !== "object" ||
+    typeof parsedData.summary.recommended_call_response !== "string" ||
+    !Array.isArray(parsedData.summary.key_points) ||
+    !Array.isArray(parsedData.summary.do_not_say)
+  ) {
+    console.error("[LOG] Missing required fields in response");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+
+  const hasInvalidReplyOption = parsedData.reply_options.some(
+    (option: unknown) =>
+      typeof option !== "string" || option.trim().length === 0,
+  );
+  if (hasInvalidReplyOption) {
+    console.error("[LOG] Invalid reply_options in response");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+
+  if (parsedData.should_ask_followup && normalizedNextQuestion.length === 0) {
+    console.error("[LOG] Invalid followup: missing next_question");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+  if (!parsedData.should_ask_followup && normalizedNextQuestion !== "") {
+    console.error("[LOG] Invalid followup: next_question must be empty");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+  if (parsedData.should_ask_followup && parsedData.should_end_call) {
+    console.error("[LOG] Invalid state: followup and end_call both true");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+  const invalidSummaryItems =
+    parsedData.summary.key_points.some(
+      (point: unknown) =>
+        typeof point !== "string" || point.trim().length === 0,
+    ) ||
+    parsedData.summary.do_not_say.some(
+      (item: unknown) => typeof item !== "string" || item.trim().length === 0,
+    );
+  if (invalidSummaryItems) {
+    console.error("[LOG] Invalid summary array items");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+
+  if (!parsedData.should_end_call) {
+    const summaryMustBeEmpty =
+      parsedData.summary.recommended_call_response === "" &&
+      parsedData.summary.key_points.length === 0 &&
+      parsedData.summary.do_not_say.length === 0;
+    if (!summaryMustBeEmpty) {
+      console.error(
+        "[LOG] Invalid summary: must be empty when should_end_call=false",
+      );
+      return errorResponse(
+        422,
+        "MODEL_OUTPUT_INVALID",
+        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+      );
+    }
+  }
+
+  if (parsedData.should_end_call) {
+    const summaryMustBeFull =
+      parsedData.summary.recommended_call_response.trim().length > 0 &&
+      parsedData.summary.key_points.length >= 2 &&
+      parsedData.summary.key_points.length <= 6 &&
+      parsedData.summary.do_not_say.length >= 2 &&
+      parsedData.summary.do_not_say.length <= 6;
+    if (!summaryMustBeFull) {
+      console.error(
+        "[LOG] Invalid summary: must be full when should_end_call=true",
+      );
+      return errorResponse(
+        422,
+        "MODEL_OUTPUT_INVALID",
+        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+      );
+    }
+  }
+
+  // Check Hebrew in response fields
+  const hebrewRegex = /[\u0590-\u05FF]/;
+  const noHebrewInOptions = parsedData.reply_options.some(
+    (option: unknown) => !hebrewRegex.test(option as string),
+  );
+  if (noHebrewInOptions) {
+    console.error("[LOG] No Hebrew detected in reply_options");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה (לא בעברית). נסה שוב.",
+    );
+  }
+  if (
+    parsedData.should_ask_followup &&
+    !hebrewRegex.test(normalizedNextQuestion)
+  ) {
+    console.error("[LOG] No Hebrew detected in next_question");
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+  if (
+    parsedData.should_end_call &&
+    !hebrewRegex.test(parsedData.summary.recommended_call_response)
+  ) {
+    console.error(
+      "[LOG] No Hebrew detected in summary.recommended_call_response",
+    );
+    return errorResponse(
+      422,
+      "MODEL_OUTPUT_INVALID",
+      "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
+    );
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -278,158 +437,12 @@ export async function POST(request: NextRequest) {
     const parsedOrResponse = parseModelJsonOrReturn(responseText);
     if (parsedOrResponse instanceof NextResponse) return parsedOrResponse;
     const parsedData = parsedOrResponse;
-
-    // Validate required fields
-    if (
-      !parsedData.urgency_level ||
-      !parsedData.reply_options ||
-      !Array.isArray(parsedData.reply_options) ||
-      parsedData.reply_options.length !== 3 ||
-      typeof parsedData.should_ask_followup !== "boolean" ||
-      typeof parsedData.next_question !== "string" ||
-      typeof parsedData.should_end_call !== "boolean" ||
-      !parsedData.summary ||
-      typeof parsedData.summary !== "object" ||
-      typeof parsedData.summary.recommended_call_response !== "string" ||
-      !Array.isArray(parsedData.summary.key_points) ||
-      !Array.isArray(parsedData.summary.do_not_say)
-    ) {
-      console.error("[LOG] Missing required fields in response");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-
-    const hasInvalidReplyOption = parsedData.reply_options.some(
-      (option: unknown) =>
-        typeof option !== "string" || option.trim().length === 0,
-    );
-    if (hasInvalidReplyOption) {
-      console.error("[LOG] Invalid reply_options in response");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-
     const normalizedNextQuestion = parsedData.next_question.trim();
-    if (parsedData.should_ask_followup && normalizedNextQuestion.length === 0) {
-      console.error("[LOG] Invalid followup: missing next_question");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-    if (!parsedData.should_ask_followup && normalizedNextQuestion !== "") {
-      console.error("[LOG] Invalid followup: next_question must be empty");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-    if (parsedData.should_ask_followup && parsedData.should_end_call) {
-      console.error("[LOG] Invalid state: followup and end_call both true");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-    const invalidSummaryItems =
-      parsedData.summary.key_points.some(
-        (point: unknown) =>
-          typeof point !== "string" || point.trim().length === 0,
-      ) ||
-      parsedData.summary.do_not_say.some(
-        (item: unknown) => typeof item !== "string" || item.trim().length === 0,
-      );
-    if (invalidSummaryItems) {
-      console.error("[LOG] Invalid summary array items");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-
-    if (!parsedData.should_end_call) {
-      const summaryMustBeEmpty =
-        parsedData.summary.recommended_call_response === "" &&
-        parsedData.summary.key_points.length === 0 &&
-        parsedData.summary.do_not_say.length === 0;
-      if (!summaryMustBeEmpty) {
-        console.error(
-          "[LOG] Invalid summary: must be empty when should_end_call=false",
-        );
-        return errorResponse(
-          422,
-          "MODEL_OUTPUT_INVALID",
-          "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-        );
-      }
-    }
-
-    if (parsedData.should_end_call) {
-      const summaryMustBeFull =
-        parsedData.summary.recommended_call_response.trim().length > 0 &&
-        parsedData.summary.key_points.length >= 2 &&
-        parsedData.summary.key_points.length <= 6 &&
-        parsedData.summary.do_not_say.length >= 2 &&
-        parsedData.summary.do_not_say.length <= 6;
-      if (!summaryMustBeFull) {
-        console.error(
-          "[LOG] Invalid summary: must be full when should_end_call=true",
-        );
-        return errorResponse(
-          422,
-          "MODEL_OUTPUT_INVALID",
-          "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-        );
-      }
-    }
-
-    // Check Hebrew in response fields
-    const hebrewRegex = /[\u0590-\u05FF]/;
-    const noHebrewInOptions = parsedData.reply_options.some(
-      (option: unknown) => !hebrewRegex.test(option as string),
+    const validationResponse = validateParsedDataOrReturn(
+      parsedData,
+      normalizedNextQuestion,
     );
-    if (noHebrewInOptions) {
-      console.error("[LOG] No Hebrew detected in reply_options");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה (לא בעברית). נסה שוב.",
-      );
-    }
-    if (
-      parsedData.should_ask_followup &&
-      !hebrewRegex.test(normalizedNextQuestion)
-    ) {
-      console.error("[LOG] No Hebrew detected in next_question");
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
-    if (
-      parsedData.should_end_call &&
-      !hebrewRegex.test(parsedData.summary.recommended_call_response)
-    ) {
-      console.error(
-        "[LOG] No Hebrew detected in summary.recommended_call_response",
-      );
-      return errorResponse(
-        422,
-        "MODEL_OUTPUT_INVALID",
-        "שירות ה-AI החזיר תשובה לא תקינה. נסה שוב.",
-      );
-    }
+    if (validationResponse) return validationResponse;
 
     // Return success response in new structured format
     return NextResponse.json(
