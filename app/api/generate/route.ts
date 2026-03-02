@@ -336,6 +336,30 @@ function validateParsedDataOrReturn(
   return null;
 }
 
+function buildSuccessResponse(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parsedData: any,
+  normalizedNextQuestion: string,
+): NextResponse {
+  return NextResponse.json(
+    {
+      ok: true,
+      data: {
+        urgency_level: parsedData.urgency_level,
+        reply_options: parsedData.reply_options,
+        should_ask_followup: parsedData.should_ask_followup,
+        next_question: normalizedNextQuestion,
+        should_end_call: parsedData.should_end_call,
+        summary: parsedData.summary,
+      },
+    },
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    },
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -444,24 +468,7 @@ export async function POST(request: NextRequest) {
     );
     if (validationResponse) return validationResponse;
 
-    // Return success response in new structured format
-    return NextResponse.json(
-      {
-        ok: true,
-        data: {
-          urgency_level: parsedData.urgency_level,
-          reply_options: parsedData.reply_options,
-          should_ask_followup: parsedData.should_ask_followup,
-          next_question: normalizedNextQuestion,
-          should_end_call: parsedData.should_end_call,
-          summary: parsedData.summary,
-        },
-      },
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      },
-    );
+    return buildSuccessResponse(parsedData, normalizedNextQuestion);
   } catch (error) {
     console.error("[LOG] Unexpected error in /api/generate:", error);
     return errorResponse(500, "INTERNAL_SERVER_ERROR", "שגיאה פנימית בשרת");
