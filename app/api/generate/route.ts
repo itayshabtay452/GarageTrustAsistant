@@ -152,6 +152,17 @@ async function callOpenAiOrReturn(
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractResponseTextOrReturn(completion: any): string | NextResponse {
+  const responseText = completion.choices[0]?.message?.content || "";
+  if (!responseText) {
+    console.error("[LOG] OpenAI returned empty response");
+    return errorResponse(502, "UPSTREAM_ERROR", "התגובה מ-AI הייתה ריקה");
+  }
+
+  return responseText;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -245,12 +256,10 @@ export async function POST(request: NextRequest) {
     if (completionOrResponse instanceof NextResponse)
       return completionOrResponse;
     const completion = completionOrResponse;
-
-    const responseText = completion.choices[0]?.message?.content || "";
-    if (!responseText) {
-      console.error("[LOG] OpenAI returned empty response");
-      return errorResponse(502, "UPSTREAM_ERROR", "התגובה מ-AI הייתה ריקה");
-    }
+    const responseTextOrResponse = extractResponseTextOrReturn(completion);
+    if (responseTextOrResponse instanceof NextResponse)
+      return responseTextOrResponse;
+    const responseText = responseTextOrResponse;
 
     // Parse structured JSON response
     let parsedData: {
