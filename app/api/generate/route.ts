@@ -26,9 +26,7 @@ async function parseJsonBodyOrReturn(
   }
 }
 
-function buildConversationMessagesOrReturn(
-  body: Record<string, unknown>,
-):
+function buildConversationMessagesOrReturn(body: Record<string, unknown>):
   | {
       conversationMessages: Array<{
         role: "user" | "assistant";
@@ -127,6 +125,33 @@ function buildConversationMessagesOrReturn(
   return { conversationMessages };
 }
 
+async function callOpenAiOrReturn(
+  openai: OpenAI,
+  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jsonSchema: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any | NextResponse> {
+  try {
+    return await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: buildMessages(conversationMessages),
+      temperature: 0.7,
+      response_format: {
+        type: "json_schema",
+        json_schema: jsonSchema,
+      },
+    });
+  } catch (openaiError) {
+    console.error("[LOG] OpenAI API error:", openaiError);
+    return errorResponse(
+      502,
+      "UPSTREAM_ERROR",
+      "שירות ה-AI זמנית לא זמין. נסה שוב עוד מעט.",
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -212,26 +237,14 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    // Call OpenAI API with structured output
-    let completion;
-    try {
-      completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: buildMessages(conversationMessages),
-        temperature: 0.7,
-        response_format: {
-          type: "json_schema",
-          json_schema: jsonSchema,
-        },
-      });
-    } catch (openaiError) {
-      console.error("[LOG] OpenAI API error:", openaiError);
-      return errorResponse(
-        502,
-        "UPSTREAM_ERROR",
-        "שירות ה-AI זמנית לא זמין. נסה שוב עוד מעט.",
-      );
-    }
+    const completionOrResponse = await callOpenAiOrReturn(
+      openai,
+      conversationMessages,
+      jsonSchema,
+    );
+    if (completionOrResponse instanceof NextResponse)
+      return completionOrResponse;
+    const completion = completionOrResponse;
 
     const responseText = completion.choices[0]?.message?.content || "";
     if (!responseText) {
