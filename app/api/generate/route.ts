@@ -26,6 +26,107 @@ async function parseJsonBodyOrReturn(
   }
 }
 
+function buildConversationMessagesOrReturn(
+  body: Record<string, unknown>,
+):
+  | {
+      conversationMessages: Array<{
+        role: "user" | "assistant";
+        content: string;
+      }>;
+    }
+  | NextResponse {
+  const { message, messages } = body as {
+    message?: unknown;
+    messages?: unknown;
+  };
+
+  // בנה messages array - בדוק אם messages קיים ותקין
+  let conversationMessages: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
+
+  if (messages && Array.isArray(messages) && messages.length > 0) {
+    // Validate each message in the array
+    try {
+      conversationMessages = (messages as unknown[]).map((msg: unknown) => {
+        if (
+          typeof msg !== "object" ||
+          msg === null ||
+          !("role" in msg) ||
+          !("content" in msg)
+        ) {
+          throw new Error("Invalid message format");
+        }
+
+        const msgObj = msg as { role?: unknown; content?: unknown };
+        if (
+          typeof msgObj.role !== "string" ||
+          (msgObj.role !== "user" && msgObj.role !== "assistant")
+        ) {
+          throw new Error("Role must be 'user' or 'assistant'");
+        }
+
+        if (typeof msgObj.content !== "string") {
+          throw new Error("Content must be a string");
+        }
+
+        const trimmedContent = msgObj.content.trim();
+        if (trimmedContent.length < 1 || trimmedContent.length > 4000) {
+          throw new Error(
+            "Each message content must be 1-4000 characters after trim",
+          );
+        }
+
+        return {
+          role: msgObj.role as "user" | "assistant",
+          content: trimmedContent,
+        };
+      });
+
+      // בדוק שיש לפחות הודעת user אחת
+      if (!conversationMessages.some((msg) => msg.role === "user")) {
+        throw new Error("Must have at least one user message");
+      }
+    } catch (validationError) {
+      return errorResponse(
+        400,
+        "BAD_REQUEST",
+        `Invalid messages format: ${validationError instanceof Error ? validationError.message : "unknown error"}`,
+      );
+    }
+  } else if (message && typeof message === "string") {
+    // Fallback: בנה מ-message יחיד
+    const trimmedMessage = message.trim();
+    if (trimmedMessage.length < 3) {
+      return errorResponse(
+        400,
+        "BAD_REQUEST",
+        "ההודעה חייבת להיות לפחות 3 תווים",
+      );
+    }
+
+    if (trimmedMessage.length > 4000) {
+      return errorResponse(
+        400,
+        "BAD_REQUEST",
+        "ההודעה לא יכולה להיות יותר מ-4000 תווים",
+      );
+    }
+
+    conversationMessages = [{ role: "user", content: trimmedMessage }];
+  } else {
+    return errorResponse(
+      400,
+      "BAD_REQUEST",
+      "Must provide either 'message' (string) or 'messages' (array)",
+    );
+  }
+
+  return { conversationMessages };
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -58,94 +159,9 @@ export async function POST(request: NextRequest) {
     const bodyOrResponse = await parseJsonBodyOrReturn(request);
     if (bodyOrResponse instanceof NextResponse) return bodyOrResponse;
     const body = bodyOrResponse;
-
-    const { message, messages } = body as {
-      message?: unknown;
-      messages?: unknown;
-    };
-
-    // בנה messages array - בדוק אם messages קיים ותקין
-    let conversationMessages: Array<{
-      role: "user" | "assistant";
-      content: string;
-    }>;
-
-    if (messages && Array.isArray(messages) && messages.length > 0) {
-      // Validate each message in the array
-      try {
-        conversationMessages = (messages as unknown[]).map((msg: unknown) => {
-          if (
-            typeof msg !== "object" ||
-            msg === null ||
-            !("role" in msg) ||
-            !("content" in msg)
-          ) {
-            throw new Error("Invalid message format");
-          }
-
-          const msgObj = msg as { role?: unknown; content?: unknown };
-          if (
-            typeof msgObj.role !== "string" ||
-            (msgObj.role !== "user" && msgObj.role !== "assistant")
-          ) {
-            throw new Error("Role must be 'user' or 'assistant'");
-          }
-
-          if (typeof msgObj.content !== "string") {
-            throw new Error("Content must be a string");
-          }
-
-          const trimmedContent = msgObj.content.trim();
-          if (trimmedContent.length < 1 || trimmedContent.length > 4000) {
-            throw new Error(
-              "Each message content must be 1-4000 characters after trim",
-            );
-          }
-
-          return {
-            role: msgObj.role as "user" | "assistant",
-            content: trimmedContent,
-          };
-        });
-
-        // בדוק שיש לפחות הודעת user אחת
-        if (!conversationMessages.some((msg) => msg.role === "user")) {
-          throw new Error("Must have at least one user message");
-        }
-      } catch (validationError) {
-        return errorResponse(
-          400,
-          "BAD_REQUEST",
-          `Invalid messages format: ${validationError instanceof Error ? validationError.message : "unknown error"}`,
-        );
-      }
-    } else if (message && typeof message === "string") {
-      // Fallback: בנה מ-message יחיד
-      const trimmedMessage = message.trim();
-      if (trimmedMessage.length < 3) {
-        return errorResponse(
-          400,
-          "BAD_REQUEST",
-          "ההודעה חייבת להיות לפחות 3 תווים",
-        );
-      }
-
-      if (trimmedMessage.length > 4000) {
-        return errorResponse(
-          400,
-          "BAD_REQUEST",
-          "ההודעה לא יכולה להיות יותר מ-4000 תווים",
-        );
-      }
-
-      conversationMessages = [{ role: "user", content: trimmedMessage }];
-    } else {
-      return errorResponse(
-        400,
-        "BAD_REQUEST",
-        "Must provide either 'message' (string) or 'messages' (array)",
-      );
-    }
+    const convOrResponse = buildConversationMessagesOrReturn(body);
+    if (convOrResponse instanceof NextResponse) return convOrResponse;
+    const { conversationMessages } = convOrResponse;
 
     // Define JSON Schema for structured output
     const jsonSchema = {
