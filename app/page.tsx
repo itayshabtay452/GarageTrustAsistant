@@ -99,7 +99,11 @@ export default function Home() {
     setIsAwaitingAgentChoice(false);
   };
 
-  const submitMessage = async (text: string): Promise<boolean> => {
+  const submitMessage = async (
+    text: string,
+    options: { clearInputText?: boolean } = {},
+  ): Promise<boolean> => {
+    const { clearInputText = true } = options;
     setLoading(true);
     setError(null);
 
@@ -215,7 +219,9 @@ export default function Home() {
         setIsAwaitingAgentChoice(true);
       }
       setSelectedReplyOption(null);
-      setInputText("");
+      if (clearInputText) {
+        setInputText("");
+      }
       return true;
     } catch (err) {
       // ודא שתמיד נשמר string | null בלבד
@@ -230,12 +236,23 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    await submitMessage(inputText);
+    await submitMessage(inputText, { clearInputText: true });
   };
 
   const handleSendUpdate = async () => {
-    const mergedText = `CALL UPDATE\nCustomer said: ${updateCustomerSaid}\nI answered: ${updateIAnswered}\nCustomer reacted: ${updateCustomerReacted}`;
-    const didSubmit = await submitMessage(mergedText);
+    const trimmedCustomerSaid = updateCustomerSaid.trim();
+    const trimmedIAnswered = updateIAnswered.trim();
+    const trimmedCustomerReacted = updateCustomerReacted.trim();
+
+    if (!trimmedCustomerSaid && !trimmedIAnswered && !trimmedCustomerReacted) {
+      setError("מלא לפחות אחד מהשדות לפני שליחה.");
+      return;
+    }
+
+    const mergedText = `CALL UPDATE\nCustomer said: ${trimmedCustomerSaid}\nI answered: ${trimmedIAnswered}\nCustomer reacted: ${trimmedCustomerReacted}`;
+    const didSubmit = await submitMessage(mergedText, {
+      clearInputText: false,
+    });
     if (didSubmit) {
       setUpdateCustomerSaid("");
       setUpdateIAnswered("");
