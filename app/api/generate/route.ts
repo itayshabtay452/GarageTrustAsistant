@@ -16,6 +16,16 @@ function getClientIp(request: Request): string | null {
   return null;
 }
 
+async function parseJsonBodyOrReturn(
+  request: Request,
+): Promise<Record<string, unknown> | NextResponse> {
+  try {
+    return await request.json();
+  } catch {
+    return errorResponse(400, "BAD_REQUEST", "גוף הבקשה חייב להיות JSON תקין");
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // זיהוי IP: x-forwarded-for (ראשון), אחרת 'local'
@@ -45,17 +55,9 @@ export async function POST(request: NextRequest) {
 
     const openai = new OpenAI({ apiKey });
 
-    // עטוף את req.json() ב-try/catch
-    let body: Record<string, unknown>;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        400,
-        "BAD_REQUEST",
-        "גוף הבקשה חייב להיות JSON תקין",
-      );
-    }
+    const bodyOrResponse = await parseJsonBodyOrReturn(request);
+    if (bodyOrResponse instanceof NextResponse) return bodyOrResponse;
+    const body = bodyOrResponse;
 
     const { message, messages } = body as {
       message?: unknown;
