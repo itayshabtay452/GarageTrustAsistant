@@ -37,6 +37,8 @@ type ApiErrorResponse = {
 
 type ApiResponse = ApiSuccessResponse | ApiErrorResponse;
 
+type EngineMode = "v1" | "v2";
+
 export default function Home() {
   const [inputText, setInputText] = useState("");
   const [conversationMessages, setConversationMessages] = useState<
@@ -53,6 +55,7 @@ export default function Home() {
   const [updateIAnswered, setUpdateIAnswered] = useState("");
   const [updateCustomerReacted, setUpdateCustomerReacted] = useState("");
   const [isAwaitingAgentChoice, setIsAwaitingAgentChoice] = useState(false);
+  const [engineMode, setEngineMode] = useState<EngineMode>("v1");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = response?.ok ? response.data : null;
@@ -271,6 +274,40 @@ export default function Home() {
             <p className="text-gray-600 mb-4">
               קבל תגובות מקצועיות לשאלות של לקוחות על הרכב שלהם
             </p>
+            <div className="mb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEngineMode("v1")}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    engineMode === "v1"
+                      ? "bg-blue-600 border-blue-700 text-white"
+                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  Engine v1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEngineMode("v2")}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    engineMode === "v2"
+                      ? "bg-blue-600 border-blue-700 text-white"
+                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  Engine v2
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-600">
+                Engine פעיל: {engineMode}
+              </p>
+            </div>
+            {engineMode === "v2" && (
+              <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+                POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
                 שלב: {phase}
