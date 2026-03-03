@@ -39,6 +39,39 @@ type ApiResponse = ApiSuccessResponse | ApiErrorResponse;
 
 type EngineMode = "v1" | "v2";
 
+type V2TranscriptTurn = {
+  customer_said: string;
+  agent_said: string;
+  customer_replied: string;
+};
+
+type V2Request = {
+  schema_version: "2.0";
+  transcript: V2TranscriptTurn[];
+  latest_customer_message: string;
+  output_language: "he";
+};
+
+type V2ResponseOk = {
+  ok: true;
+  data: {
+    assistant_message: string;
+    next_question?: string;
+    phase: string;
+    confidence: { score: number; reason: string };
+    escalation: {
+      should_escalate: boolean;
+      reason: string;
+      recommended_action: string;
+    };
+    should_end_call: boolean;
+    summary?: unknown;
+  };
+};
+
+type V2ResponseErr = { ok: false; error: { code?: string; message: string } };
+type V2ApiResponse = V2ResponseOk | V2ResponseErr;
+
 export default function Home() {
   const [inputText, setInputText] = useState("");
   const [conversationMessages, setConversationMessages] = useState<
@@ -56,6 +89,7 @@ export default function Home() {
   const [updateCustomerReacted, setUpdateCustomerReacted] = useState("");
   const [isAwaitingAgentChoice, setIsAwaitingAgentChoice] = useState(false);
   const [engineMode, setEngineMode] = useState<EngineMode>("v1");
+  const [responseV2, setResponseV2] = useState<V2ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = response?.ok ? response.data : null;
@@ -102,10 +136,74 @@ export default function Home() {
     setIsAwaitingAgentChoice(false);
   };
 
+  const submitMessageV2 = async (text?: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const customerSaid = updateCustomerSaid.trim();
+      const agentSaid = updateIAnswered.trim();
+      const customerReplied = updateCustomerReacted.trim();
+
+      const payload: V2Request = {
+        schema_version: "2.0",
+        transcript: [
+          {
+            customer_said: customerSaid,
+            agent_said: agentSaid,
+            customer_replied: customerReplied,
+          },
+        ],
+        latest_customer_message:
+          customerReplied || customerSaid || text?.trim() || "",
+        output_language: "he",
+      };
+
+      const res = await fetch("/api/generate-v2", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let jsonData: V2ApiResponse;
+      try {
+        jsonData = (await res.json()) as V2ApiResponse;
+      } catch {
+        throw new Error("אירעה שגיאה. נסה שוב.");
+      }
+
+      if (!res.ok || jsonData.ok === false) {
+        const errorMessage =
+          jsonData.ok === false
+            ? jsonData.error.message
+            : "אירעה שגיאה. נסה שוב.";
+        setError(errorMessage);
+        setResponseV2(jsonData);
+        return false;
+      }
+
+      setResponseV2(jsonData);
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "אירעה שגיאה. נסה שוב.";
+      setError(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submitMessage = async (
     text: string,
     options: { clearInputText?: boolean } = {},
   ): Promise<boolean> => {
+    if (engineMode === "v2") {
+      return submitMessageV2(text);
+    }
+
     const { clearInputText = true } = options;
     setLoading(true);
     setError(null);
@@ -304,9 +402,19 @@ export default function Home() {
               </p>
             </div>
             {engineMode === "v2" && (
-              <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
-                POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
-              </div>
+              <>
+                <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+                  POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
+                </div>
+                {responseV2 && (
+                  <pre
+                    className="mb-4 p-3 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-xs overflow-x-auto"
+                    dir="ltr"
+                  >
+                    {JSON.stringify(responseV2, null, 2)}
+                  </pre>
+                )}
+              </>
             )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
