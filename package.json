@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "stability": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner.ps1",
-    "stability:all": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner.ps1 -IncludeSuccess"
+    "stability:all": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner.ps1 -IncludeSuccess",
+    "stability:v2": "powershell -ExecutionPolicy Bypass -File scripts/stability-runner-v2.ps1"
   },
   "dependencies": {
     "next": "16.1.6",
