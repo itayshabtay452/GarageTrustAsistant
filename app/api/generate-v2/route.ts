@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { buildMessages } from "../_lib/prompts";
+import { buildMessagesV2 } from "../_lib/prompts";
 import { isRateLimited } from "../_lib/rateLimit";
+import { validateV2Request } from "../_lib/validate";
 
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json({ ok: false, error: { code, message } }, { status });
@@ -127,7 +128,7 @@ function buildConversationMessagesOrReturn(body: Record<string, unknown>):
 
 async function callOpenAiOrReturn(
   openai: OpenAI,
-  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>,
+  inputMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   jsonSchema: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,7 +136,7 @@ async function callOpenAiOrReturn(
   try {
     return await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: buildMessages(conversationMessages),
+      messages: inputMessages,
       temperature: 0.7,
       response_format: {
         type: "json_schema",
@@ -392,9 +393,11 @@ export async function POST(request: NextRequest) {
     const bodyOrResponse = await parseJsonBodyOrReturn(request);
     if (bodyOrResponse instanceof NextResponse) return bodyOrResponse;
     const body = bodyOrResponse;
-    const convOrResponse = buildConversationMessagesOrReturn(body);
-    if (convOrResponse instanceof NextResponse) return convOrResponse;
-    const { conversationMessages } = convOrResponse;
+    const validated = validateV2Request(body);
+    if (!validated.ok) {
+      return errorResponse(400, "BAD_REQUEST", validated.message);
+    }
+    const inputMessages = buildMessagesV2(validated.data);
 
     // Define JSON Schema for structured output
     const jsonSchema = {
@@ -447,7 +450,7 @@ export async function POST(request: NextRequest) {
 
     const completionOrResponse = await callOpenAiOrReturn(
       openai,
-      conversationMessages,
+      inputMessages,
       jsonSchema,
     );
     if (completionOrResponse instanceof NextResponse)
