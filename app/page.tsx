@@ -417,109 +417,123 @@ export default function Home() {
                   POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
                 </div>
 
-                {responseV2 && responseV2.ok && (
-                  <div className="space-y-3">
-                    <div
-                      className="p-4 rounded-lg border border-blue-300 bg-blue-50"
-                      dir="rtl"
-                    >
-                      <p className="text-lg font-semibold text-blue-900 leading-relaxed">
-                        {responseV2.data.assistant_message}
-                      </p>
-                    </div>
+                {responseV2 &&
+                  responseV2.ok &&
+                  (() => {
+                    const v2 = responseV2.data;
+                    const scoreRaw = v2.confidence?.score;
+                    const score =
+                      typeof scoreRaw === "number"
+                        ? Math.max(0, Math.min(100, scoreRaw))
+                        : 0;
+                    const confidenceReason = v2.confidence?.reason ?? "";
+                    const phase = v2.phase ?? "unknown";
+                    const escalation = v2.escalation;
 
-                    <div
-                      className="flex flex-wrap items-center gap-2"
-                      dir="rtl"
-                    >
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(
-                              responseV2.data.assistant_message,
-                            );
-                            setCopiedV2(true);
-                            window.setTimeout(() => setCopiedV2(false), 1500);
-                          } catch {
-                            setError("לא ניתן להעתיק ללוח.");
-                          }
-                        }}
-                        className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
-                      >
-                        העתק
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setUpdateIAnswered(responseV2.data.assistant_message)
-                        }
-                        className="px-3 py-2 rounded-lg border border-blue-300 bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200"
-                      >
-                        ערוך לפני שליחה
-                      </button>
-                      {copiedV2 && (
-                        <span className="text-xs text-green-700">הועתק</span>
-                      )}
-                    </div>
-
-                    {responseV2.data.next_question?.trim() && (
-                      <div dir="rtl">
-                        <span className="inline-flex px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs">
-                          שאלה הבאה: {responseV2.data.next_question.trim()}
-                        </span>
-                      </div>
-                    )}
-
-                    <div
-                      className="flex flex-wrap items-center gap-2 text-xs"
-                      dir="rtl"
-                    >
-                      <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
-                        שלב: {responseV2.data.phase}
-                      </span>
-                    </div>
-
-                    <div
-                      className="p-3 rounded-lg border border-slate-300 bg-white"
-                      title={responseV2.data.confidence.reason}
-                      dir="rtl"
-                    >
-                      <p className="text-sm text-gray-800 mb-2">
-                        ביטחון:{" "}
-                        {Math.max(
-                          0,
-                          Math.min(100, responseV2.data.confidence.score),
-                        )}
-                        /100
-                      </p>
-                      <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                    return (
+                      <div className="space-y-3">
                         <div
-                          className="h-2 bg-indigo-500"
-                          style={{
-                            width: `${Math.max(0, Math.min(100, responseV2.data.confidence.score))}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
+                          className="p-4 rounded-lg border border-blue-300 bg-blue-50"
+                          dir="rtl"
+                        >
+                          <p className="text-lg font-semibold text-blue-900 leading-relaxed">
+                            {v2.assistant_message}
+                          </p>
+                        </div>
 
-                    {responseV2.data.escalation.should_escalate && (
-                      <div
-                        className="p-4 rounded-lg border border-red-300 bg-red-50 text-red-900"
-                        dir="rtl"
-                      >
-                        <p className="font-semibold mb-1">נדרשת הסלמה</p>
-                        <p className="text-sm mb-1">
-                          {responseV2.data.escalation.reason}
-                        </p>
-                        <p className="text-sm">
-                          פעולה מומלצת:{" "}
-                          {responseV2.data.escalation.recommended_action}
-                        </p>
+                        <div
+                          className="flex flex-wrap items-center gap-2"
+                          dir="rtl"
+                        >
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(
+                                  v2.assistant_message,
+                                );
+                                setCopiedV2(true);
+                                window.setTimeout(
+                                  () => setCopiedV2(false),
+                                  1500,
+                                );
+                              } catch {
+                                setError("לא ניתן להעתיק ללוח.");
+                              }
+                            }}
+                            className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                          >
+                            העתק
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setUpdateIAnswered(v2.assistant_message)
+                            }
+                            className="px-3 py-2 rounded-lg border border-blue-300 bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200"
+                          >
+                            ערוך לפני שליחה
+                          </button>
+                          {copiedV2 && (
+                            <span className="text-xs text-green-700">
+                              הועתק
+                            </span>
+                          )}
+                        </div>
+
+                        {v2.next_question?.trim() && (
+                          <div dir="rtl">
+                            <span className="inline-flex px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs">
+                              שאלה הבאה: {v2.next_question.trim()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div
+                          className="flex flex-wrap items-center gap-2 text-xs"
+                          dir="rtl"
+                        >
+                          <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
+                            שלב: {phase}
+                          </span>
+                        </div>
+
+                        <div
+                          className="p-3 rounded-lg border border-slate-300 bg-white"
+                          title={confidenceReason}
+                          dir="rtl"
+                        >
+                          <p className="text-sm text-gray-800 mb-2">
+                            ביטחון: {score}/100
+                          </p>
+                          <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                            <div
+                              className="h-2 bg-indigo-500"
+                              style={{
+                                width: `${score}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {escalation && escalation.should_escalate === true && (
+                          <div
+                            className="p-4 rounded-lg border border-red-300 bg-red-50 text-red-900"
+                            dir="rtl"
+                          >
+                            <p className="font-semibold mb-1">נדרשת הסלמה</p>
+                            <p className="text-sm mb-1">
+                              {escalation.reason ?? ""}
+                            </p>
+                            <p className="text-sm">
+                              פעולה מומלצת:{" "}
+                              {escalation.recommended_action ?? ""}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                )}
+                    );
+                  })()}
 
                 {responseV2 && (
                   <details className="rounded-lg border border-slate-300 bg-slate-50 p-3">
