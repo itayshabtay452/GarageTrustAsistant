@@ -90,6 +90,7 @@ export default function Home() {
   const [isAwaitingAgentChoice, setIsAwaitingAgentChoice] = useState(false);
   const [engineMode, setEngineMode] = useState<EngineMode>("v1");
   const [responseV2, setResponseV2] = useState<V2ApiResponse | null>(null);
+  const [copiedV2, setCopiedV2] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = response?.ok ? response.data : null;
@@ -137,25 +138,34 @@ export default function Home() {
   };
 
   const submitMessageV2 = async (text?: string): Promise<boolean> => {
+    const customerSaid = updateCustomerSaid.trim();
+    const agentSaid = updateIAnswered.trim();
+    const customerReplied = updateCustomerReacted.trim();
+    const latest = (
+      customerReplied ||
+      customerSaid ||
+      (text?.trim() ?? "")
+    ).trim();
+
+    if (!latest) {
+      setError("ב-Engine v2 חייבים למלא לפחות 'הלקוח אמר' או 'הלקוח הגיב'.");
+      return false;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const customerSaid = updateCustomerSaid.trim();
-      const agentSaid = updateIAnswered.trim();
-      const customerReplied = updateCustomerReacted.trim();
-
       const payload: V2Request = {
         schema_version: "2.0",
         transcript: [
           {
-            customer_said: customerSaid,
+            customer_said: customerSaid || latest,
             agent_said: agentSaid,
-            customer_replied: customerReplied,
+            customer_replied: customerReplied || latest,
           },
         ],
-        latest_customer_message:
-          customerReplied || customerSaid || text?.trim() || "",
+        latest_customer_message: latest,
         output_language: "he",
       };
 
@@ -402,19 +412,129 @@ export default function Home() {
               </p>
             </div>
             {engineMode === "v2" && (
-              <>
-                <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+              <div className="mb-4 space-y-3">
+                <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
                   POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
                 </div>
-                {responseV2 && (
-                  <pre
-                    className="mb-4 p-3 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 text-xs overflow-x-auto"
-                    dir="ltr"
-                  >
-                    {JSON.stringify(responseV2, null, 2)}
-                  </pre>
+
+                {responseV2 && responseV2.ok && (
+                  <div className="space-y-3">
+                    <div
+                      className="p-4 rounded-lg border border-blue-300 bg-blue-50"
+                      dir="rtl"
+                    >
+                      <p className="text-lg font-semibold text-blue-900 leading-relaxed">
+                        {responseV2.data.assistant_message}
+                      </p>
+                    </div>
+
+                    <div
+                      className="flex flex-wrap items-center gap-2"
+                      dir="rtl"
+                    >
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              responseV2.data.assistant_message,
+                            );
+                            setCopiedV2(true);
+                            window.setTimeout(() => setCopiedV2(false), 1500);
+                          } catch {
+                            setError("לא ניתן להעתיק ללוח.");
+                          }
+                        }}
+                        className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                      >
+                        העתק
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUpdateIAnswered(responseV2.data.assistant_message)
+                        }
+                        className="px-3 py-2 rounded-lg border border-blue-300 bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200"
+                      >
+                        ערוך לפני שליחה
+                      </button>
+                      {copiedV2 && (
+                        <span className="text-xs text-green-700">הועתק</span>
+                      )}
+                    </div>
+
+                    {responseV2.data.next_question?.trim() && (
+                      <div dir="rtl">
+                        <span className="inline-flex px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs">
+                          שאלה הבאה: {responseV2.data.next_question.trim()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div
+                      className="flex flex-wrap items-center gap-2 text-xs"
+                      dir="rtl"
+                    >
+                      <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
+                        שלב: {responseV2.data.phase}
+                      </span>
+                    </div>
+
+                    <div
+                      className="p-3 rounded-lg border border-slate-300 bg-white"
+                      title={responseV2.data.confidence.reason}
+                      dir="rtl"
+                    >
+                      <p className="text-sm text-gray-800 mb-2">
+                        ביטחון:{" "}
+                        {Math.max(
+                          0,
+                          Math.min(100, responseV2.data.confidence.score),
+                        )}
+                        /100
+                      </p>
+                      <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                        <div
+                          className="h-2 bg-indigo-500"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, responseV2.data.confidence.score))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {responseV2.data.escalation.should_escalate && (
+                      <div
+                        className="p-4 rounded-lg border border-red-300 bg-red-50 text-red-900"
+                        dir="rtl"
+                      >
+                        <p className="font-semibold mb-1">נדרשת הסלמה</p>
+                        <p className="text-sm mb-1">
+                          {responseV2.data.escalation.reason}
+                        </p>
+                        <p className="text-sm">
+                          פעולה מומלצת:{" "}
+                          {responseV2.data.escalation.recommended_action}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </>
+
+                {responseV2 && (
+                  <details className="rounded-lg border border-slate-300 bg-slate-50 p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-slate-700">
+                      Debug
+                    </summary>
+                    <pre
+                      className="mt-2 text-xs text-slate-800 overflow-x-auto"
+                      dir="ltr"
+                    >
+                      {JSON.stringify(responseV2, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
             )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="px-3 py-1 rounded-full bg-gray-100 border border-gray-300 text-gray-700">
