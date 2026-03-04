@@ -90,6 +90,7 @@ export default function Home() {
   const [isAwaitingAgentChoice, setIsAwaitingAgentChoice] = useState(false);
   const [engineMode, setEngineMode] = useState<EngineMode>("v1");
   const [responseV2, setResponseV2] = useState<V2ApiResponse | null>(null);
+  const [transcriptV2, setTranscriptV2] = useState<V2TranscriptTurn[]>([]);
   const [copiedV2, setCopiedV2] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,15 +138,26 @@ export default function Home() {
     setIsAwaitingAgentChoice(false);
   };
 
+  const buildCurrentTurnV2 = (): V2TranscriptTurn => ({
+    customer_said: updateCustomerSaid.trim(),
+    agent_said: updateIAnswered.trim(),
+    customer_replied: updateCustomerReacted.trim(),
+  });
+
   const submitMessageV2 = async (text?: string): Promise<boolean> => {
     const customerSaid = updateCustomerSaid.trim();
-    const agentSaid = updateIAnswered.trim();
     const customerReplied = updateCustomerReacted.trim();
     const latest = (
       customerReplied ||
       customerSaid ||
       (text?.trim() ?? "")
     ).trim();
+    const currentTurn = buildCurrentTurnV2();
+    const turnToSend: V2TranscriptTurn = {
+      customer_said: currentTurn.customer_said || latest,
+      agent_said: currentTurn.agent_said,
+      customer_replied: currentTurn.customer_replied || latest,
+    };
 
     if (!latest) {
       setError("ב-Engine v2 חייבים למלא לפחות 'הלקוח אמר' או 'הלקוח הגיב'.");
@@ -158,13 +170,7 @@ export default function Home() {
     try {
       const payload: V2Request = {
         schema_version: "2.0",
-        transcript: [
-          {
-            customer_said: customerSaid || latest,
-            agent_said: agentSaid,
-            customer_replied: customerReplied || latest,
-          },
-        ],
+        transcript: [...transcriptV2, turnToSend],
         latest_customer_message: latest,
         output_language: "he",
       };
@@ -195,6 +201,7 @@ export default function Home() {
       }
 
       setResponseV2(jsonData);
+      setTranscriptV2((prev) => [...prev, turnToSend]);
       return true;
     } catch (err) {
       const errorMessage =
@@ -415,6 +422,47 @@ export default function Home() {
               <div className="mb-4 space-y-3">
                 <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
                   POC: תצוגת v2 תופיע כאן (ללא שינוי התנהגות עדיין)
+                </div>
+
+                <div
+                  className="p-3 rounded-lg border border-slate-300 bg-white space-y-3"
+                  dir="rtl"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Transcript (v2)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTranscriptV2([]);
+                        setResponseV2(null);
+                      }}
+                      className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
+                    >
+                      נקה Transcript
+                    </button>
+                  </div>
+
+                  {transcriptV2.length === 0 ? (
+                    <p className="text-xs text-gray-500">אין עדיין תורות</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {transcriptV2.map((turn, index) => (
+                        <div
+                          key={`v2-turn-${index}`}
+                          className="p-3 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800"
+                        >
+                          <p className="font-medium text-gray-900 mb-1">
+                            Turn #{index + 1}
+                          </p>
+                          <p>הלקוח אמר: {turn.customer_said || "-"}</p>
+                          <p>הנציג אמר: {turn.agent_said || "-"}</p>
+                          <p>הלקוח הגיב: {turn.customer_replied || "-"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {responseV2 &&
