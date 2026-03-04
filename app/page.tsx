@@ -580,9 +580,22 @@ export default function Home() {
 
                         {v2.next_question?.trim() && (
                           <div dir="rtl">
-                            <span className="inline-flex px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs">
-                              שאלה הבאה: {v2.next_question.trim()}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const q = v2.next_question?.trim();
+                                if (q) {
+                                  setUpdateIAnswered(q);
+                                  setTimeout(
+                                    () => iAnsweredRef.current?.focus(),
+                                    0,
+                                  );
+                                }
+                              }}
+                              className="inline-flex px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs hover:bg-slate-200 cursor-pointer"
+                            >
+                              שאלה הבאה: {v2.next_question.trim()} (לחץ למילוי)
+                            </button>
                           </div>
                         )}
 
