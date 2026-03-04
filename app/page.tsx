@@ -150,14 +150,10 @@ export default function Home() {
     a.agent_said === b.agent_said &&
     a.customer_replied === b.customer_replied;
 
-  const submitMessageV2 = async (text?: string): Promise<boolean> => {
+  const submitMessageV2 = async (): Promise<boolean> => {
     const customerSaid = updateCustomerSaid.trim();
     const customerReplied = updateCustomerReacted.trim();
-    const latest = (
-      customerReplied ||
-      customerSaid ||
-      (text?.trim() ?? "")
-    ).trim();
+    const latest = (customerReplied || customerSaid).trim();
     const currentTurn = buildCurrentTurnV2();
     const turnToSend: V2TranscriptTurn = {
       customer_said: currentTurn.customer_said || latest,
@@ -230,7 +226,7 @@ export default function Home() {
     options: { clearInputText?: boolean } = {},
   ): Promise<boolean> => {
     if (engineMode === "v2") {
-      return submitMessageV2(text);
+      return submitMessageV2();
     }
 
     const { clearInputText = true } = options;
@@ -451,8 +447,7 @@ export default function Home() {
                           const currentTurn = buildCurrentTurnV2();
                           const latest = (
                             currentTurn.customer_replied ||
-                            currentTurn.customer_said ||
-                            inputText.trim()
+                            currentTurn.customer_said
                           ).trim();
 
                           if (!latest) {
