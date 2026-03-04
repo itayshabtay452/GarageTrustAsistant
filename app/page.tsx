@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type ConversationMessage = {
   role: "user" | "assistant";
@@ -92,6 +92,7 @@ export default function Home() {
   const [responseV2, setResponseV2] = useState<V2ApiResponse | null>(null);
   const [transcriptV2, setTranscriptV2] = useState<V2TranscriptTurn[]>([]);
   const [copiedV2, setCopiedV2] = useState(false);
+  const iAnsweredRef = useRef<HTMLTextAreaElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = response?.ok ? response.data : null;
@@ -143,6 +144,11 @@ export default function Home() {
     agent_said: updateIAnswered.trim(),
     customer_replied: updateCustomerReacted.trim(),
   });
+
+  const isSameTurn = (a: V2TranscriptTurn, b: V2TranscriptTurn) =>
+    a.customer_said === b.customer_said &&
+    a.agent_said === b.agent_said &&
+    a.customer_replied === b.customer_replied;
 
   const submitMessageV2 = async (text?: string): Promise<boolean> => {
     const customerSaid = updateCustomerSaid.trim();
@@ -201,7 +207,13 @@ export default function Home() {
       }
 
       setResponseV2(jsonData);
-      setTranscriptV2((prev) => [...prev, turnToSend]);
+      setTranscriptV2((prev) => {
+        const last = prev[prev.length - 1];
+        if (last && isSameTurn(last, turnToSend)) {
+          return prev;
+        }
+        return [...prev, turnToSend];
+      });
       return true;
     } catch (err) {
       const errorMessage =
@@ -432,16 +444,54 @@ export default function Home() {
                     <h3 className="text-sm font-semibold text-gray-900">
                       Transcript (v2)
                     </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTranscriptV2([]);
-                        setResponseV2(null);
-                      }}
-                      className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
-                    >
-                      נקה Transcript
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentTurn = buildCurrentTurnV2();
+                          const latest = (
+                            currentTurn.customer_replied ||
+                            currentTurn.customer_said ||
+                            inputText.trim()
+                          ).trim();
+
+                          if (!latest) {
+                            setError(
+                              "ב-Engine v2 חייבים למלא לפחות 'הלקוח אמר' או 'הלקוח הגיב'.",
+                            );
+                            return;
+                          }
+
+                          const turnToAppend: V2TranscriptTurn = {
+                            customer_said: currentTurn.customer_said || latest,
+                            agent_said: currentTurn.agent_said,
+                            customer_replied:
+                              currentTurn.customer_replied || latest,
+                          };
+
+                          setTranscriptV2((prev) => {
+                            const last = prev[prev.length - 1];
+                            if (last && isSameTurn(last, turnToAppend)) {
+                              return prev;
+                            }
+                            return [...prev, turnToAppend];
+                          });
+                        }}
+                        className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
+                      >
+                        הוסף כ-Turn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTranscriptV2([]);
+                          setResponseV2(null);
+                        }}
+                        className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
+                      >
+                        נקה Transcript
+                      </button>
+                    </div>
                   </div>
 
                   {transcriptV2.length === 0 ? (
@@ -515,9 +565,13 @@ export default function Home() {
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              setUpdateIAnswered(v2.assistant_message)
-                            }
+                            onClick={() => {
+                              setUpdateIAnswered(v2.assistant_message);
+                              setTimeout(
+                                () => iAnsweredRef.current?.focus(),
+                                0,
+                              );
+                            }}
                             className="px-3 py-2 rounded-lg border border-blue-300 bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200"
                           >
                             ערוך לפני שליחה
@@ -712,6 +766,7 @@ export default function Home() {
                   I answered
                 </label>
                 <textarea
+                  ref={iAnsweredRef}
                   value={updateIAnswered}
                   onChange={(e) => setUpdateIAnswered(e.target.value)}
                   rows={3}
